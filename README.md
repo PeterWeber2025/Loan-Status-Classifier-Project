@@ -1,6 +1,6 @@
 # Loan Status Classifier Project
 
-**CPSC 322 - Introduction to Artificial Intelligence**  
+**CPSC 322 - Data Science Algorithms**  
 **Fall 2025**
 
 A comprehensive machine learning project to predict loan status (good vs bad loans) using the Lending Club dataset. 
