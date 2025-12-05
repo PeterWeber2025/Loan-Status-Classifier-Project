@@ -6,29 +6,7 @@
 A comprehensive machine learning project to predict loan status (good vs bad loans) using the Lending Club dataset. 
 ## Project Overview
 
-This project classifies loans as either "Good" (Fully Paid/Current) or "Bad" (Charged Off/Late/Default) based on borrower and loan characteristics.
-
-
-
-## Project Structure
-
-```
-Loan-Status-Classifier-Project/
-├── mysklearn/                    # Custom machine learning implementations
-│   ├── __init__.py
-│   ├── myrandomforest.py         # Custom Random Forest classifier
-│   └── mytree.py                 # Custom Decision Tree classifier
-├── tests/                        # Unit tests (TDD approach)
-│   └── test_myrandomforest.py
-├── Project Proposal.ipynb        # Technical report and implementation
-├── lc_loan_truncated.csv         # Dataset (180,000 rows, 74 attributes)
-├── requirements.txt              # Python dependencies
-├── Dockerfile                     # Docker configuration
-├── docker-compose.yml            # Docker Compose configuration
-├── .dockerignore                  # Files to exclude from Docker build
-├── run_tests.py                  # Test runner script
-└── README.md                     # This file
-```
+This project classifies loans as either "Good" (Fully Paid) or "Bad" (Charged Off/Late/Default) based on borrower and loan characteristics.
 
 ## Dataset
 
@@ -36,70 +14,6 @@ Loan-Status-Classifier-Project/
 - **Size**: 180,000 rows, 74 attributes
 - **Time Period**: 2007-2015
 - **Target Variable**: `loan_status` (binary: Good vs Bad loans)
-
-## Installation
-
-### Option 1: Docker (Recommended)
-
-The easiest way to run this project is using Docker:
-
-1. **Using Docker Compose (Recommended)**:
-```bash
-# Build and start the container
-docker-compose up --build
-
-# The Jupyter Lab will be available at http://localhost:8888
-```
-
-2. **Using Docker directly**:
-```bash
-# Build the image
-docker build -t loan-classifier .
-
-# Run the container
-docker run -p 8888:8888 -v $(pwd):/app loan-classifier
-```
-
-The Jupyter Lab interface will be available at `http://localhost:8888` with no password required.
-
-### Option 2: Local Installation
-
-1. Clone or download this repository
-
-2. Install required packages:
-```bash
-pip install -r requirements.txt
-```
-
-3. Open the Jupyter notebook:
-```bash
-jupyter notebook "Project Proposal.ipynb"
-```
-
-Or use Jupyter Lab:
-```bash
-jupyter lab "Project Proposal.ipynb"
-```
-
-## Usage
-
-### Running with Docker
-
-1. **Start the container**:
-```bash
-docker-compose up
-```
-
-2. **Access Jupyter Lab**: Open your browser and navigate to `http://localhost:8888`
-
-3. **Open the notebook**: Click on `Project Proposal.ipynb` in the file browser
-
-4. **Run all cells**: Use `Cell > Run All` or run cells sequentially
-
-5. **Stop the container**: Press `Ctrl+C` in the terminal, then run:
-```bash
-docker-compose down
-```
 
 ### Running the Notebook
 
@@ -152,7 +66,8 @@ The `MyRandomForestClassifier` follows these specifications:
 
 ## Results
 
-The project compares multiple machine learning algorithms and identifies the best-performing model based on accuracy and ROC-AUC score. The custom Random Forest implementation performs competitively compared to random forest.
+The project compares multiple machine learning algorithms and identifies the best-performing model based on accuracy and recall and includes a custom Random Forest implementation,
+
 ## Technical Report
 
 The complete technical report is included in `Project Proposal.ipynb` with:
