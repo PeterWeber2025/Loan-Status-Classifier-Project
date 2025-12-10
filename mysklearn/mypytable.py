@@ -134,7 +134,7 @@ class MyPyTable:
     
     def drop_column(self, attribute):
         if attribute not in self.column_names:
-            print('Attribute Missing From Column Names')
+            print(f'Attribute {attribute} Missing From Column Names')
             return 0 
         attribute_index = self.column_names.index(attribute)
         self.column_names.pop(attribute_index)

@@ -22,6 +22,8 @@ def label_encoder(label, list_labels, list_values):
     
     return label
 
+
+
 def count_label_distribution(list_1d):
     label_counter = {}
 
@@ -29,6 +31,8 @@ def count_label_distribution(list_1d):
         label_counter[value] = label_counter.get(value, 0) + 1
     
     return label_counter
+
+
 
 def find_attribute_domains(instances, available_attributes, header):
     attribute_domains = {}

@@ -1,12 +1,17 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def bar_plot(x,y, title=None, x_label=None,y_label=None, size=None, color=None):
+
+
+def bar_plot(x,y, title=None, x_label=None,y_label=None, size=None, color=None, val_sort=False, plot_x_ticks=True):
     
     x = np.array(x)
     y = np.array(y)
 
-    indices_to_sort_by = np.argsort(y)[::-1] ##Basically lets you store the indices x would be sorted by
+    if val_sort == True:
+        indices_to_sort_by = np.argsort(y)[::-1] ##Basically lets you store the indices x would be sorted by
+    else:
+        indices_to_sort_by = np.argsort(x)
 
     x_sorted = x[indices_to_sort_by] ##We then use these sorted indices, to make sure when we sort x, we don't lose it's relationship to y
     y_sorted = y[indices_to_sort_by]
@@ -21,10 +26,11 @@ def bar_plot(x,y, title=None, x_label=None,y_label=None, size=None, color=None):
 
     if size is not None:
         fig.set_size_inches(size)
-    if len(x) > 4:
-        plt.xticks(xrng, x_sorted, rotation=45, ha='right')
-    else:
-        plt.xticks(xrng, x_sorted)        
+    if plot_x_ticks:
+        if len(x) > 4:
+            plt.xticks(xrng, x_sorted, rotation=45, ha='right')
+        else:
+            plt.xticks(xrng, x_sorted)        
     plt.xlabel(x_label)
     plt.ylabel(y_label)
     plt.title(title)

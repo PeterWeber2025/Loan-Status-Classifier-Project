@@ -1,281 +1,298 @@
-import math
 from math import sqrt
-from collections import defaultdict
 from mysklearn.mysimplelinearregressor import MySimpleLinearRegressor
-from mysklearn import myutils
+import numpy as np
+from collections import Counter
+from sklearn.model_selection import StratifiedShuffleSplit
+from .mytree import MyDecisionTreeClassifier
 
+class MyRandomForestClassifier:
+    """
+    n_trees : int, default=20
+        Number of trees to generate (N)
+    n_selected_trees : int, default=7
+        Number of best trees to select (M)
+    n_features : int, default=2
+        Number of random features to consider at each node (F)
+    max_depth : int, default=10
+        Maximum depth of each tree
+    min_samples_split : int, default=2
+        Minimum number of samples required to split a node
+    random_state : int, optional
+        Random seed for reproducibility
+    """
+    
+    def __init__(self, n_trees=20, n_selected_trees=7, n_features=2, 
+                 max_depth=10, min_samples_split=2, random_state=None):
+        self.n_trees = n_trees
+        self.n_selected_trees = n_selected_trees
+        self.n_features = n_features
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.random_state = random_state
+        self.forest = []
+        self.feature_indices_list = []
+        self.test_set_indices = None
+        self.remainder_set_indices = None
+        
+        if random_state is not None:
+            np.random.seed(random_state)
+    
+    def _bootstrap_sample(self, X, y):
+        """Generate a bootstrap sample from the data"""
+        n_samples = len(X)
+        indices = np.random.choice(n_samples, size=n_samples, replace=True)
+        return X[indices], y[indices], indices
+    
+    def _split_train_val(self, X, y, val_ratio=0.2):
+        """Split bootstrap sample into training and validation sets"""
+        n_samples = len(X)
+        n_val = int(n_samples * val_ratio)
+        indices = np.random.permutation(n_samples)
+        
+        val_indices = indices[:n_val]
+        train_indices = indices[n_val:]
+        
+        X_train = X[train_indices]
+        y_train = y[train_indices]
+        X_val = X[val_indices]
+        y_val = y[val_indices]
+        
+        return X_train, y_train, X_val, y_val
+    
+    def _get_random_features(self, n_total_features):
+        """Get random feature indices for a node"""
+        n_features_to_select = min(self.n_features, n_total_features)
+        return np.random.choice(n_total_features, size=n_features_to_select, replace=False).tolist()
+    
+    def _calculate_accuracy(self, y_true, y_pred):
+        """Calculate accuracy"""
+        return np.mean(y_true == y_pred)
+    
+    def fit(self, X, y):
+        """
+        Fit the random forest classifier
+        
+        Pre-processing: Split data into 1/3 test and 2/3 remainder
+        Generate N trees using bootstrapping, select M best trees
+        """
+        X = np.array(X)
+        y = np.array(y)
+        
+        # Pre-processing: Split into test (1/3) and remainder (2/3)
+        n_total = len(X)
+        indices = np.arange(n_total)
+        
+        # Use StratifiedShuffleSplit to get indices
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=1/3, random_state=self.random_state)
+        remainder_indices, test_indices = next(sss.split(X, y))
+        
+        # Store indices for reference
+        self.test_set_indices = test_indices
+        self.remainder_set_indices = remainder_indices
+        
+        # Get actual data splits
+        X_remainder = X[remainder_indices]
+        X_test = X[test_indices]
+        y_remainder = y[remainder_indices]
+        y_test = y[test_indices]
+        
+        # Generate N trees
+        trees_with_scores = []
+        
+        for i in range(self.n_trees):
+            # Bootstrap sample from remainder set
+            X_boot, y_boot, _ = self._bootstrap_sample(X_remainder, y_remainder)
+            
+            # Split into train and validation
+            X_train, y_train, X_val, y_val = self._split_train_val(X_boot, y_boot)
+            
+            # Build tree with random feature selection at each node
+            n_total_features = X_train.shape[1]
+            feature_indices = self._get_random_features(n_total_features)
+            
+            # Build decision tree
+            tree = MyDecisionTreeClassifier()
+            tree.fit(X_train, y_train, feature_indices=feature_indices, 
+                    max_depth=self.max_depth, min_samples_split=self.min_samples_split)
+            
+            # Evaluate on validation set
+            y_val_pred = tree.predict(X_val)
+            accuracy = self._calculate_accuracy(y_val, y_val_pred)
+            
+            trees_with_scores.append((tree, accuracy, feature_indices))
+        
+        # Select M most accurate trees
+        trees_with_scores.sort(key=lambda x: x[1], reverse=True)
+        selected_trees = trees_with_scores[:self.n_selected_trees]
+        
+        self.forest = [tree for tree, _, _ in selected_trees]
+        self.feature_indices_list = [feat_idx for _, _, feat_idx in selected_trees]
+        
+        return self
+    
+    def predict(self, X):
+        """
+        Predict class labels using majority voting
+        """
+        X = np.array(X)
+        n_samples = X.shape[0]
+        predictions = []
+        
+        for i in range(n_samples):
+            # Get predictions from all trees in forest
+            tree_predictions = []
+            for tree in self.forest:
+                pred = tree._predict_single(X[i], tree.tree)
+                tree_predictions.append(pred)
+            
+            # Majority voting
+            majority_class = Counter(tree_predictions).most_common(1)[0][0]
+            predictions.append(majority_class)
+        
+        return np.array(predictions)
+    
+    def get_forest_size(self):
+        """Get the number of trees in the forest"""
+        return len(self.forest)
 
 class MyDecisionTreeClassifier:
-    """Represents a decision tree classifier.
-
-    Attributes:
-        X_train(list of list of obj): The list of training instances (samples).
-                The shape of X_train is (n_train_samples, n_features)
-        y_train(list of obj): The target y values (parallel to X_train).
-            The shape of y_train is n_samples
-        tree(nested list): The extracted tree model.
-
-    Notes:
-        Loosely based on sklearn's DecisionTreeClassifier:
-            https://scikit-learn.org/stable/modules/generated/sklearn.tree.DecisionTreeClassifier.html
-        Terminology: instance = sample = row and attribute = feature = column
-    """
+    """Decision Tree Classifier using entropy for splitting"""
+    
     def __init__(self):
-        """Initializer for MyDecisionTreeClassifier.
-        """
-        self.X_train = None
-        self.y_train = None
-        self.train = None
         self.tree = None
-        self.header = None
-
-    def calculate_weighted_partition_entropy(self, instances, attribute, header, attribute_domains):
-        '''
-        Returns the weighted average entropy of a set of partitions after splitting instances on an attribute
-        '''
-        total_rows = len(instances)
-        att_index = header.index(attribute)
         
-        att_domain = attribute_domains[attribute]
+    def _entropy(self, y):
+        """Calculate entropy of a set of labels"""
+        if len(y) == 0:
+            return 0
+        counts = Counter(y)
+        probabilities = [count / len(y) for count in counts.values()]
+        entropy = -sum(p * np.log2(p) if p > 0 else 0 for p in probabilities)
+        return entropy
+    
+    def _information_gain(self, y_parent, y_left, y_right):
+        """Calculate information gain from a split"""
+        parent_entropy = self._entropy(y_parent)
+        n = len(y_parent)
+        if n == 0:
+            return 0
+        left_weight = len(y_left) / n
+        right_weight = len(y_right) / n
+        weighted_entropy = left_weight * self._entropy(y_left) + right_weight * self._entropy(y_right)
+        return parent_entropy - weighted_entropy
+    
+    def _find_best_split(self, X, y, feature_indices):
+        """Find the best split among the given feature indices"""
+        best_gain = -1
+        best_feature = None
+        best_threshold = None
         
-        weighted_entropy = 0
-        partition_entropy = []
-
-        for att_value in att_domain: ## For Every Unique Value In The Attribute
-            att_value_rows = [row for row in instances if row[att_index] == att_value] ##Get All Rows Where Unique Value Occurs
-            class_value_rows = [row[-1] for row in instances if row[att_index] == att_value]
-            unique_class_values = list(set(class_value_rows))
-            if len(att_value_rows) == 0: 
-                continue
-
-            entropy = 0
-
-            for unique_class in unique_class_values: ## For Each Unique Class Label
-                class_amount = 0
-                for row in att_value_rows:
-                    if row[-1] == unique_class: ##Add Up The Number Of Times It Occurs Under Unique Attribute Value
-                        class_amount += 1
-
-                probability = class_amount / len(att_value_rows)
-                if probability > 0:
-                    entropy -=  probability * math.log(probability, 2) ##entropy -= because the formula involves multiplying by '-'
-
-            partition_entropy.append((entropy, len(att_value_rows))) ##Append each Partitions Entropy And size To List.
-        
-        ##With The Entropies For Each Partition Of Attribute Found, It Is Time For Calculating weighted Entropy
-
-        for partition in partition_entropy: #0 is entropy, 1 is size of partition.
-            weighted_entropy += partition[0] * (partition[1]/total_rows)
-
-        return weighted_entropy    
-
-    def select_attribute(self, instances, attributes, header, attribute_domains):
-        '''
-        Basically iterates through each attribute calculating the entropy of splitting on it.
-        All Entropies are saved, the atrribute that leads to the lowest entropy after splitting is the returned attribute.
-        
-        :param instances: All the rows of data to consider splits on.
-        :param attributes: Attributes We we can split on
-        '''
-
-        weighted_entropies = []
-
-        for attribute in attributes:
-            weighted_entropy = self.calculate_weighted_partition_entropy(instances,attribute, header, attribute_domains)
-            weighted_entropies.append(weighted_entropy)
-
-        minimum_entropy = min(weighted_entropies)
-        best_attribute_index = weighted_entropies.index(minimum_entropy)
-
-        best_attribute = attributes[best_attribute_index]
-        #print(attributes)
-        #print(weighted_entropies)
-        return best_attribute
-
-    def partition_instances(self, instances, attribute, header, attribute_domains):
-        # this is group by attribute domain (not values of attribute in instances)
-        # Returns a dictionary: {attribute_value: [instances]}
-        att_index = header.index(attribute)
-        att_domain = attribute_domains[attribute]
-        partitions = {}
-        for att_value in att_domain: # "Junior" -> "Mid" -> "Senior"
-            partitions[att_value] = []
-            for instance in instances:
-                if instance[att_index] == att_value:
-                    partitions[att_value].append(instance)
-        return partitions
-
-    def tdidt(self, current_instances, available_attributes, header):  
-        attribute_domains = myutils.find_attribute_domains(current_instances, available_attributes, header)
-        split_attribute = self.select_attribute(current_instances, available_attributes, header, attribute_domains)
-        available_attributes.remove(split_attribute) # can't split on this attribute again in this subtree
-
-        tree = ["Attribute", split_attribute]
-
-        partitions = self.partition_instances(current_instances, split_attribute, header, attribute_domains)
-        #print("partitions:", list(partitions.keys()))
-
-        # for each partition, repeat unless one of the following base cases occurs
-        for att_value in sorted(partitions.keys()): # process in alphabetical order
-            att_value_partition = partitions[att_value]
-            value_subtree = ["Value", att_value]
-
-
-            if len(att_value_partition) > 0 and myutils.all_same_class(att_value_partition): ##CASE 1: all class labels of the partition are the same, make leaf
-                #print("CASE 1")
-                #print(att_value_partition)
-                value_subtree.append(["Leaf", att_value_partition[0][-1], len(att_value_partition), len(current_instances)])
-                tree.append(value_subtree)
-
-            #    CASE 2: no more attributes to select (clash)
-            # => handle clash w/majority vote leaf node
-            elif len(att_value_partition) > 0 and len(available_attributes) == 0:
-                #print("CASE 2")
-                class_frequency = {}
-                for row in att_value_partition:
-                    value = row[-1]
-                    class_frequency[value] = class_frequency.get(value, 0) + 1
-                chosen_class = max(class_frequency, key=class_frequency.get)
-                value_subtree.append(["Leaf", chosen_class, len(att_value_partition), len(current_instances)])
-                tree.append(value_subtree)
+        for feature_idx in feature_indices:
+            # Get unique values for this feature
+            values = sorted(set(X[:, feature_idx]))
             
-            elif len(att_value_partition) == 0: ## CASE 3: Empty partition backtrack and replace attribute node with majority vote leaf node
-                #print("CASE 3")
-                class_frequency = {}
-                for row in att_value_partition:
-                    value = row[-1]
-                    class_frequency[value] = class_frequency.get(value, 0) + 1
-                chosen_class = max(class_frequency, key=class_frequency.get)
-                return ["Leaf", chosen_class, len(current_instances), len(current_instances)]
-                ##I return here because it's the easiest way to remove prior attribute.
-            
-            else:
-                subtree = self.tdidt(att_value_partition, available_attributes.copy(), header)
-                value_subtree.append(subtree)
-                tree.append(value_subtree)
-        return tree
-
-    def fit(self, X_train, y_train, header=None):
-        """Fits a decision tree classifier to X_train and y_train using the TDIDT
-        (top down induction of decision tree) algorithm.
-
-        Args:
-            X_train(list of list of obj): The list of training instances (samples).
-                The shape of X_train is (n_train_samples, n_features)
-            y_train(list of obj): The target y values (parallel to X_train)
-                The shape of y_train is n_train_samples
-
-        Notes:
-            Since TDIDT is an eager learning algorithm, this method builds a decision tree model
-                from the training data.
-            Build a decision tree using the nested list representation described in class.
-            On a majority vote tie, choose first attribute value based on attribute domain ordering.
-            Store the tree in the tree attribute.
-            Use attribute indexes to construct default attribute names (e.g. "att0", "att1", ...).
-        """
-        if header is None:
-            header = []    
-            for x_attr_index in range(len(X_train[0])):
-                header.append('att' + str(x_attr_index))
-                self.header = header
+            # Try thresholds between consecutive values
+            for i in range(len(values) - 1):
+                threshold = (values[i] + values[i + 1]) / 2
+                
+                # Split data
+                left_mask = X[:, feature_idx] <= threshold
+                right_mask = ~left_mask
+                
+                if np.sum(left_mask) == 0 or np.sum(right_mask) == 0:
+                    continue
+                
+                y_left = y[left_mask]
+                y_right = y[right_mask]
+                
+                # Calculate information gain
+                gain = self._information_gain(y, y_left, y_right)
+                
+                if gain > best_gain:
+                    best_gain = gain
+                    best_feature = feature_idx
+                    best_threshold = threshold
+        
+        return best_feature, best_threshold, best_gain
+    
+    def _build_tree(self, X, y, feature_indices, max_depth=10, min_samples_split=2, depth=0):
+        """Recursively build the decision tree"""
+        # Base cases
+        if len(y) == 0:
+            return None
+        
+        # If all labels are the same, return a leaf
+        if len(set(y)) == 1:
+            return {'leaf': True, 'class': y[0]}
+        
+        # If max depth reached or too few samples, return majority class
+        if depth >= max_depth or len(y) < min_samples_split:
+            return {'leaf': True, 'class': Counter(y).most_common(1)[0][0]}
+        
+        # If no features available, return majority class
+        if len(feature_indices) == 0:
+            return {'leaf': True, 'class': Counter(y).most_common(1)[0][0]}
+        
+        # Find best split
+        best_feature, best_threshold, best_gain = self._find_best_split(X, y, feature_indices)
+        
+        # If no good split found, return majority class
+        if best_feature is None or best_gain <= 0:
+            return {'leaf': True, 'class': Counter(y).most_common(1)[0][0]}
+        
+        # Split data
+        left_mask = X[:, best_feature] <= best_threshold
+        right_mask = ~left_mask
+        
+        # Build subtrees
+        left_tree = self._build_tree(
+            X[left_mask], y[left_mask], feature_indices,
+            max_depth, min_samples_split, depth + 1
+        )
+        right_tree = self._build_tree(
+            X[right_mask], y[right_mask], feature_indices,
+            max_depth, min_samples_split, depth + 1
+        )
+        
+        return {
+            'leaf': False,
+            'feature': best_feature,
+            'threshold': best_threshold,
+            'left': left_tree,
+            'right': right_tree
+        }
+    
+    def fit(self, X, y, feature_indices=None, max_depth=10, min_samples_split=2):
+        X = np.array(X)
+        y = np.array(y)
+        
+        if feature_indices is None:
+            feature_indices = list(range(X.shape[1]))
+        
+        self.tree = self._build_tree(X, y, feature_indices, max_depth, min_samples_split)
+        return self
+    
+    def _predict_single(self, x, tree):
+        """Predict a single instance"""
+        if tree is None:
+            return None
+        
+        if tree['leaf']:
+            return tree['class']
+        
+        if x[tree['feature']] <= tree['threshold']:
+            return self._predict_single(x, tree['left'])
         else:
-            self.header=header
-
-        self.train = [X_train[i] + [y_train[i]] for i in range(len(X_train))]
-        self.tree = self.tdidt(self.train, header.copy(), header.copy()) ##First Copy Turns Into Available Attributes, other stays header
-        #print(self.tree)
-        pass
-
-    def predict_row(self, tree, X_test):
-        """Makes predictions for test instances in X_test.
-
-        Args:
-            X_test(list of list of obj): The list of testing samples
-                The shape of X_test is (n_test_samples, n_features)
-
-        Returns:
-            y_predicted(list of obj): The predicted target y values (parallel to X_test)
-        """
-        data_type = tree[0]
-        
-        # Base case: if this is a leaf, just return its class label
-        if data_type == "Leaf":
-            label = tree[1]
-            return label
-        
-        # Recursive case:if we are here, this is an Attribute node
-        attribute_name = tree[1]
-        attribute_index = self.header.index(attribute_name)
-        instance_value = X_test[attribute_index]
-
-        # Look for the matching value node
-        for values in tree[2:]:
-            value = values[1]
-            subtree = values[2]
-            
-            if instance_value == value:
-                return self.predict_row(subtree, X_test)
-
-    def predict(self, X_test):
+            return self._predict_single(x, tree['right'])
+    
+    def predict(self, X):
+        """Predict class labels for instances in X"""
+        X = np.array(X)
         predictions = []
-        for row in X_test:
-            predictions.append(self.predict_row(self.tree, row))
-        return predictions
-
-    def print_decision_rules(self, attribute_names=None, class_name="class"):
-        """Prints the decision rules from the tree in the format
-        "IF att == val AND ... THEN class = label", one rule on each line.
-
-        Args:
-            attribute_names(list of str or None): A list of attribute names to use in the decision rules
-                (None if a list is not provided and the default attribute names based on indexes
-                (e.g. "att0", "att1", ...) should be used).
-            class_name(str): A string to use for the class name in the decision rules
-                ("class" if a string is not provided and the default name "class" should be used).
-        """
-        if attribute_names is None:
-            attribute_names = self.header
-        
-        if self.tree[0] == "Leaf":
-            print(f'All Values {self.tree[1]}')
-
-
-        def recursive_rule_finder(tree, rule_starter=None, rules = []):
-            class_starter = f'THEN {class_name} ='
-
-            if rule_starter is None:
-                rule_starter = f'IF {tree[1]} == '
-
-            for values in tree[2:]:
-                value = values[1]
-                subtree = values[2]
-                #print(f'Value: {value}')
-
-                if subtree[0] == 'Leaf':
-                    #print(f'Leafs: {values[2]}')
-                    rule = rule_starter + f'{value} {class_starter} {subtree[1]}'
-                    rules.append(rule)
-                else:
-                    new_rule_starter = rule_starter + f'{value} AND {subtree[1]} == '
-                    rules = recursive_rule_finder(subtree, new_rule_starter, rules)
-            return rules
-        
-        rules = recursive_rule_finder(self.tree)
-        
-        filtered_rules = []
-
-        for rule in rules: ##Not a perfect way to filter rules by attribute_names
-            for attribute in attribute_names: ##If overlap between attributes names and value names
-                if attribute in rule: ##Things will get screwy, good enough for now though
-                    filtered_rules.append(rule)
-                    break
-
-        # for values in self.tree[2:]:
-        #     print(values)
-
-        for rule in filtered_rules:
-            print(rule)
-
+        for x in X:
+            predictions.append(self._predict_single(x, self.tree))
+        return np.array(predictions)
+    
 class MySimpleLinearRegressionClassifier:
     """Represents a simple linear regression classifier that discretizes
         predictions from a simple linear regressor (see MySimpleLinearRegressor).
