@@ -49,7 +49,7 @@ class MyPyTable:
         column_length = len(self.column_names)
         return row_length, column_length
 
-    def print_shape(self, columns=True,row=True,shape=True):
+    def print_shape(self, columns=False,row=False,shape=True):
         """Prints the dimension of the table (N x M)"""
 
         if columns:
@@ -94,7 +94,7 @@ class MyPyTable:
 
         if include_missing_values is False:
             for row in self.data:
-                if row[col_index] != 'NA':
+                if row[col_index] != 'NA' and row[col_index] != '':
                     column_list.append(row[col_index])
         else:
             for row in self.data:
@@ -131,6 +131,15 @@ class MyPyTable:
         """
         for index in sorted(row_indexes_to_drop, reverse=True): ## Sorting so I don't mess up subsequent removals
             self.data.pop(index)
+    
+    def drop_column(self, attribute):
+        if attribute not in self.column_names:
+            print('Attribute Missing From Column Names')
+            return 0 
+        attribute_index = self.column_names.index(attribute)
+        self.column_names.pop(attribute_index)
+        for row in self.data:
+            row.pop(attribute_index)
 
 
     def load_from_file(self, filename):
@@ -239,7 +248,7 @@ class MyPyTable:
 
         for row_index, row in enumerate(self.data):
             for item in row:
-                if item == 'NA':
+                if item == 'NA' or item == '' or item == 'n/a':
                     indices_to_drop.append(row_index)
                     break
 
@@ -247,7 +256,20 @@ class MyPyTable:
         #     print(self.data[index])
 
         self.drop_rows(indices_to_drop)
+    
+    def print_nan_by_column(self, null_print=False):
+        nan_attribute_counter = {}
 
+        for attribute in self.column_names:
+            nan_attribute_counter[attribute] = 0
+            attribute_column = self.get_column(attribute)
+            for value in attribute_column:
+                if value == 'NA' or value == '' or value == 'n/a':
+                    nan_attribute_counter[attribute] += 1
+        
+        if null_print:
+            print(nan_attribute_counter)
+        return nan_attribute_counter
 
     def replace_missing_values_with_column_average(self, col_name):
         """For columns with continuous data, fill missing values in a column

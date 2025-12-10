@@ -375,34 +375,41 @@ class MyKNeighborsClassifier:
         self.y_train = y_train
 
     def kneighbors(self, X_test):
+        """Determines the k closes neighbors of each test instance.
+
+        Args:
+            X_test(list of list of numeric vals): The list of testing samples
+                The shape of X_test is (n_test_samples, n_features)
+
+        Returns:
+            distances(list of list of float): 2D list of k nearest neighbor distances
+                for each instance in X_test
+            neighbor_indices(list of list of int): 2D list of k nearest neighbor
+                indices in X_train (parallel to distances)
+        """
+
         dimensions = len(X_test[0])
+
         distances = []
         neighbor_indices = []
 
         for point_index in range(len(X_test)):
-            top_k = []  # will store (distance, index) for the k nearest neighbors
+            dist_ind = [] ##Distance + Index
             for other_point_index in range(len(self.X_train)):
-                # Compute squared distance
                 distance_between = 0
                 for d_index in range(dimensions):
                     distance_between += (X_test[point_index][d_index] - self.X_train[other_point_index][d_index]) ** 2
 
-                if len(top_k) < self.n_neighbors:
-                    top_k.append((distance_between, other_point_index))
-                else:
-                    # Find the max distance in top_k
-                    max_dist_index = 0
-                    for i, (dist, _) in enumerate(top_k):
-                        if dist > top_k[max_dist_index][0]:
-                            max_dist_index = i
-                    # Replace if the new distance is smaller
-                    if distance_between < top_k[max_dist_index][0]:
-                        top_k[max_dist_index] = (distance_between, other_point_index)
+                distance_between = round(sqrt(distance_between),3)
+                dist_ind.append([distance_between, other_point_index])
+            dist_ind.sort(key=lambda dist_ind: dist_ind[0])
+            dist_ind = dist_ind[0:self.n_neighbors]
 
-            # Extract distances and indices and sort them
-            top_k.sort(key=lambda x: x[0])
-            closest_dist = [d for d, _ in top_k]
-            closest_ind = [idx for _, idx in top_k]
+            closest_dist = []
+            closest_ind = []
+            for item in dist_ind:
+                closest_dist.append(item[0])
+                closest_ind.append(item[1])
 
             distances.append(closest_dist)
             neighbor_indices.append(closest_ind)
@@ -425,14 +432,14 @@ class MyKNeighborsClassifier:
         y_predicted = []
 
         for group_indices in neighbor_indices:
-            class_counter = defaultdict(int)
+            class_counter = {}
             for index in group_indices:
-                class_counter[self.y_train[index]] += 1
-
-            # pick the class with the highest count
-            predicted_class = max(class_counter, key=class_counter.get)
-            y_predicted.append(predicted_class)
-
+                if self.y_train[index] in class_counter.keys():
+                    class_counter[self.y_train[index]] += 1
+                else:
+                    class_counter[self.y_train[index]] = 0
+            max_keys = [key for key, value in class_counter.items() if value == max(class_counter.values())] ##Did this in case of ties
+            y_predicted.append(max_keys[0])
         return y_predicted
 
 class MyDummyClassifier:

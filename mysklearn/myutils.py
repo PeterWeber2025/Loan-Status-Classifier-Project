@@ -9,6 +9,27 @@ from mysklearn import myevaluation
 from tabulate import tabulate
 from mysklearn import myevaluation
 
+
+def label_encoder(label, list_labels, list_values):
+    '''
+    Expects That the the list of values to substitute is parallel to this list of
+    values to subsitute with i.e: [Gold,Silver,Bronze] [1,2,3]
+    '''
+    if label in list_labels:
+        label_index = list_labels.index(label)
+
+        return list_values[label_index]
+    
+    return label
+
+def count_label_distribution(list_1d):
+    label_counter = {}
+
+    for value in list_1d:
+        label_counter[value] = label_counter.get(value, 0) + 1
+    
+    return label_counter
+
 def find_attribute_domains(instances, available_attributes, header):
     attribute_domains = {}
 
@@ -153,8 +174,6 @@ def cross_val_predict(classifier_object, unfolded_data, n_splits,shuffle=False):
     return mean_accuracy
 
 
-
-
 def random_subsample(classifier_object, X, y, test_size=.33, k_count=5):
 
     accuracy_list = []
@@ -191,7 +210,6 @@ def mpg_ranking_discretizer(value):
         return 2
     else:
         return 1
-
 
 
 def print_attribute_index(list_1d, attributes):    
